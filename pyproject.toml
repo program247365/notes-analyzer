@@ -1,0 +1,30 @@
+[project]
+name = "notes-analyzer"
+version = "0.1"
+description = "Using deepseek to ask questions of Bear notes"
+readme = "README.md"
+authors = [{name = "Kevin B. Ridgway"}]
+license = {text = "Apache-2.0"}
+requires-python = ">=3.8"
+classifiers = [
+    "License :: OSI Approved :: Apache Software License"
+]
+dependencies = [
+    "click"
+]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project.urls]
+Homepage = "https://github.com/program247365/notes-analyzer"
+Changelog = "https://github.com/program247365/notes-analyzer/releases"
+Issues = "https://github.com/program247365/notes-analyzer/issues"
+CI = "https://github.com/program247365/notes-analyzer/actions"
+
+[project.scripts]
+notes-analyzer = "notes_analyzer.cli:cli"
+
+[project.optional-dependencies]
+test = ["pytest"]
