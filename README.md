@@ -9,6 +9,16 @@
 
 Ask questions based on the context of all your Bear notes.
 
+## Quickstart
+
+Run the following:
+
+```bash
+make install #installs all the deps
+make init # syncs your Bear notes to a folder, and then indexes them as embeddings into ChromaDB sqlite db
+make ask # now you can run this command to query your notes
+```
+
 ## Requirements
 
 - [Bear notes](https://bear.app) installed on your Mac
@@ -22,16 +32,6 @@ Ask questions based on the context of all your Bear notes.
 - [nomic-embed-text](https://ollama.com/library/nomic-embed-text) - a small text embedding model to embed Bear notes
 - [ChromaDB](https://www.chromadb.dev/) - an open-source vector database to store and query embeddings
 - [Ollama](https://ollama.com) - an open-source language model
-
-## Quickstart
-
-Run the following:
-
-```bash
-make install #installs all the deps
-make init # syncs your Bear notes to a folder, and then indexes them as embeddings into ChromaDB sqlite db
-make ask # now you can run this command to query your notes
-```
 
 ## Installation
 
