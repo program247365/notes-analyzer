@@ -14,8 +14,7 @@ Ask questions based on the context of all your Bear notes.
 Run the following:
 
 ```bash
-make install #installs all the deps
-make init # syncs your Bear notes to a folder, and then indexes them as embeddings into ChromaDB sqlite db
+make init # pulls model down, starts ollama, syncs your Bear notes to a folder, and then indexes them as embeddings into ChromaDB sqlite db
 make ask # now you can run this command to query your notes
 ```
 

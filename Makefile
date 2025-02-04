@@ -53,10 +53,17 @@ index:
 	@echo "Indexing notes from directory: $(shell pwd)/$(SYNCED_NOTES_DIR)"
 	$(PYTHON) -m notes_analyzer index $(SYNCED_NOTES_DIR)
 
-init: sync index
+init: install ollama-pull start-ollama sync index
+
+ollama-pull:
+	ollama pull $(OLLAMA_MODEL)
 
 start-ollama:
-	ollama run $(OLLAMA_MODEL)
+	@if ! pgrep -x "ollama" > /dev/null; then \
+		ollama serve & \
+	else \
+		echo "Ollama is already running"; \
+	fi
 
 ask:
 	@if [ ! -d "$(NOTES_DB)" ]; then \
