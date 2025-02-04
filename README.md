@@ -7,6 +7,8 @@
 
 > Using [smollm2](https://ollama.com/library/smollm2:135m) to ask questions of my [Bear notes](https://bear.app).
 
+Ask questions based on the context of all your Bear notes.
+
 ## Requirements
 
 - [Bear notes](https://bear.app) installed on your Mac
