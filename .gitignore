@@ -1,9 +1,21 @@
-.venv
+# Virtual environment
+venv/
+
+# Synced notes
+synced-notes/
+
+# ChromaDB
+chromadb_db/
+
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
-venv
+*.egg-info/
+.pytest_cache/
+.coverage
+.venv
 .eggs
-.pytest_cache
-*.egg-info
 .DS_Store
+.env
+.notes_analyzer/

@@ -1,7 +1,7 @@
 [project]
 name = "notes-analyzer"
 version = "0.1"
-description = "Using deepseek to ask questions of Bear notes"
+description = "Using smollm2 to ask questions of Bear notes"
 readme = "README.md"
 authors = [{name = "Kevin B. Ridgway"}]
 license = {text = "Apache-2.0"}
@@ -10,7 +10,9 @@ classifiers = [
     "License :: OSI Approved :: Apache Software License"
 ]
 dependencies = [
-    "click"
+    "click",
+    "chromadb",
+    "markdown",
 ]
 
 [build-system]
@@ -27,4 +29,37 @@ CI = "https://github.com/program247365/notes-analyzer/actions"
 notes-analyzer = "notes_analyzer.cli:cli"
 
 [project.optional-dependencies]
-test = ["pytest"]
+test = [
+    "pytest>=7.0.0",
+    "black>=24.0.0",
+    "isort>=5.13.0",
+    "ruff>=0.2.0",
+]
+
+[tool.black]
+line-length = 88
+target-version = ["py311"]
+include = '\.pyi?$'
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+line_length = 88
+
+[tool.ruff]
+target-version = "py311"
+line-length = 88
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # isort
+]
+ignore = []
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
