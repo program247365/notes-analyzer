@@ -23,6 +23,16 @@ Ask questions based on the context of all your Bear notes.
 - [ChromaDB](https://www.chromadb.dev/) - an open-source vector database to store and query embeddings
 - [Ollama](https://ollama.com) - an open-source language model
 
+## Quickstart
+
+Run the following:
+
+```bash
+make install #installs all the deps
+make init # syncs your Bear notes to a folder, and then indexes them as embeddings into ChromaDB sqlite db
+make ask # now you can run this command to query your notes
+```
+
 ## Installation
 
 Install this tool using `pip`:
