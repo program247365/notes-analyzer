@@ -1,4 +1,5 @@
 import concurrent.futures
+import logging
 import multiprocessing
 import os
 from concurrent.futures import ThreadPoolExecutor
@@ -7,11 +8,16 @@ import chromadb
 import click
 import requests
 
+# Suppress ChromaDB's messages
+logging.getLogger("chromadb").setLevel(logging.ERROR)
+logging.getLogger("chromadb.telemetry").setLevel(logging.ERROR)
+
 # ------------------------------------------------------------------------------
 # Constants
 # ------------------------------------------------------------------------------
 
 BATCH_SIZE = 64  # Batch size for processing embeddings and ChromaDB operations
+MAX_SEARCH_RESULTS = 100  # Maximum number of search results to return
 
 # ------------------------------------------------------------------------------
 # Helper functions
@@ -237,11 +243,11 @@ def index(notes_dir):
 
 @cli.command()
 @click.argument("query")
-def ask(query):
+@click.option("--web", is_flag=True, help="Open results in web browser")
+def search(query, web):
     """
-    Query the indexed notes with a question.
-    This command retrieves relevant documents from ChromaDB and
-    then uses mistral to generate an answer.
+    Search the indexed notes for relevant documents matching the query.
+    This command retrieves and displays relevant documents from ChromaDB.
     """
     # Initialize the persistent ChromaDB client
     db_path = get_db_path()
@@ -255,7 +261,7 @@ def ask(query):
     client = chromadb.PersistentClient(path=db_path)
     collection = client.get_or_create_collection("notes")
 
-    # Debug: Check if collection has any documents
+    # Check if collection has any documents
     count = collection.count()
     if count == 0:
         click.echo("\nError: No documents found in the database.")
@@ -265,57 +271,269 @@ def ask(query):
         )
         return
 
-    # First, get an embedding for the query
-    click.echo(f"Found {count} documents in the database.")
+    # Get an embedding for the query
     query_embedding = get_embedding(query)
 
-    # click.echo(f"Query embedding: {query_embedding}")
-
-    # Query ChromaDB for the top 3 relevant documents
+    # Query ChromaDB for relevant documents
     click.echo("Querying the index...")
     results = collection.query(
         query_embeddings=[query_embedding],
-        n_results=min(3, count),  # Don't try to get more results than we have documents
-        include=["metadatas", "documents", "distances"],  # Added 'documents' to include
+        n_results=min(MAX_SEARCH_RESULTS, count),
+        include=["metadatas", "documents", "distances"],
     )
-
-    # Debug output
-    # click.echo(f"Results: {results}")
 
     if not results or not results["documents"] or len(results["documents"]) == 0:
-        click.echo("\nNo relevant documents found for your query.")
+        msg = "\n🔍 No matching documents found for your query."
+        if web:
+            html_content = f"<h1>{msg}</h1>"
+            _open_in_browser(html_content)
+        else:
+            click.secho(msg, fg="yellow")
         return
 
-    # Show detailed results
-    click.echo("\nMatched documents:")
-    for i, (doc, meta, distance) in enumerate(
-        zip(
-            results["documents"][0],
-            results["metadatas"][0],
-            results["distances"][0],
-            strict=False,
+    if web:
+        html_content = _generate_html_results(query, results)
+        _open_in_browser(html_content)
+    else:
+        _display_cli_results(results)
+
+
+def _generate_html_results(query, results):
+    """Generate HTML content for search results."""
+    # Dedupe results first
+    deduped_results, duplicates = _dedupe_results(results)
+
+    result_count = len(deduped_results)
+    max_distance = max(r[2] for r in deduped_results) if deduped_results else 1.0
+
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Search Results: {query}</title>
+        <style>
+            body {{ 
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 
+                    Roboto, Oxygen, Ubuntu, Cantarell, sans-serif; 
+                line-height: 1.6; 
+                max-width: 800px; 
+                margin: 0 auto; 
+                padding: 20px; 
+            }}
+            .result {{ 
+                border: 1px solid #eee; 
+                padding: 20px; 
+                margin: 20px 0; 
+                border-radius: 8px; 
+            }}
+            .title {{ color: #2970ff; font-size: 1.2em; font-weight: bold; margin: 0; }}
+            .relevance {{ color: #16a34a; font-size: 0.9em; margin: 5px 0; }}
+            .preview {{ color: #374151; margin: 10px 0; }}
+            .metadata {{ color: #6b7280; font-size: 0.9em; }}
+            .bear-link {{ color: #6b7280; text-decoration: none; }}
+            .bear-link:hover {{ text-decoration: underline; }}
+            .header {{ margin-bottom: 30px; }}
+            .tip {{ 
+                background: #fef3c7; 
+                padding: 10px; 
+                border-radius: 6px; 
+                margin-top: 20px; 
+                color: #92400e; 
+            }}
+            .duplicate-link {{ 
+                color: #6b7280;  /* Changed to match metadata color */
+                font-size: 0.9em;
+                margin-left: 10px;
+                text-decoration: none;
+            }}
+            .duplicate-link:hover {{
+                text-decoration: underline;
+            }}
+            .metadata-row {{
+                display: flex;
+                align-items: center;
+                gap: 10px;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <h1>🔍 Found {result_count} unique documents</h1>
+            <p>Search query: "{query}"</p>
+        </div>
+    """
+
+    for doc, meta, distance in deduped_results:
+        relevance = max(0, min(100, int(100 * (1 - (distance / max_distance)))))
+
+        title = doc.split("\n")[0]
+        if title.startswith("# "):
+            title = title[2:]
+
+        preview = doc.replace("\n", " ").strip()
+        preview = preview[:150] + "..." if len(preview) > 150 else preview
+
+        bear_url = f"bear://x-callback-url/open-note?title={title}&new_window=yes"
+
+        html += f"""
+        <div class="result">
+            <h2 class="title">{title}</h2>
+            <p class="relevance">Relevance: {relevance}%</p>
+            <p class="preview">{preview}</p>
+            <p class="metadata metadata-row">
+                📝 {meta["filename"]}<br>
+                <a href="{bear_url}" class="bear-link">🔗 Open in Bear</a>
+                {
+            _generate_duplicate_links_html(title, duplicates)
+            if title in duplicates
+            else ""
+        }
+            </p>
+        </div>
+        """
+
+    html += """
+        <div class="tip">
+            💡 Tip: Use 'make ask "<prompt>"' to generate AI responses about 
+            these topics
+        </div>
+    </body>
+    </html>
+    """
+
+    return html
+
+
+def _generate_duplicate_links_html(title, duplicates):
+    """Generate HTML for duplicate links."""
+    dupe_links = []
+    for _, _, _ in duplicates[title]:
+        bear_url = f"bear://x-callback-url/open-note?title={title}&new_window=yes"
+        dupe_links.append(
+            f'<a href="{bear_url}" class="duplicate-link">Duplicate note here</a>'
         )
+
+    return f"• {', '.join(dupe_links)}" if dupe_links else ""
+
+
+def _open_in_browser(html_content):
+    """Write HTML content to temp file and open in browser."""
+    import tempfile
+    import webbrowser
+
+    with tempfile.NamedTemporaryFile("w", delete=False, suffix=".html") as f:
+        f.write(html_content)
+        webbrowser.open("file://" + f.name)
+
+
+def _dedupe_results(results):
+    """Dedupe results by title and track duplicates."""
+    deduped = []
+    duplicates = {}
+    seen_titles = {}
+
+    # Zip all result data together
+    for doc, meta, distance in zip(
+        results["documents"][0],
+        results["metadatas"][0],
+        results["distances"][0],
+        strict=False,
     ):
-        click.echo(f"\n{i + 1}. {meta['filename']} (similarity: {1 - distance:.3f})")
-        # Show a preview of the document (first 100 chars)
-        preview = doc[:100] + "..." if len(doc) > 100 else doc
-        click.echo(f"Preview: {preview}")
+        # Get title from document content
+        title = doc.split("\n")[0]
+        if title.startswith("# "):
+            title = title[2:]
 
-    # Continue with combining documents for context
-    retrieved_docs = results["documents"][0]
-    retrieved_files = [m["filename"] for m in results["metadatas"][0]]
+        if title in seen_titles:
+            # Track duplicate
+            if title not in duplicates:
+                duplicates[title] = []
+            duplicates[title].append((doc, meta, distance))
+        else:
+            # First occurrence
+            seen_titles[title] = len(deduped)
+            deduped.append((doc, meta, distance))
 
-    click.echo("\nFound relevant content in these files:")
-    for filename in retrieved_files:
-        click.echo(f"- {filename}")
+    return deduped, duplicates
 
-    context = "\n\n".join(retrieved_docs)
 
-    # Use the context in the prompt for generating an answer
-    prompt = (
-        f"Based on the following context, answer the question:\n\n"
-        f"{context}\n\nQuestion: {query}"
+def _display_cli_results(results):
+    """Display results in CLI format."""
+    # Dedupe results first
+    deduped_results, duplicates = _dedupe_results(results)
+
+    # Show search summary
+    result_count = len(deduped_results)
+    click.secho(f"\n🔍 Found {result_count} unique documents", fg="green", bold=True)
+    click.secho("─" * 80, fg="bright_black")
+
+    # Calculate max distance for normalization
+    max_distance = max(r[2] for r in deduped_results) if deduped_results else 1.0
+
+    for i, (doc, meta, distance) in enumerate(deduped_results):
+        relevance = max(0, min(100, int(100 * (1 - (distance / max_distance)))))
+
+        # Get title
+        title = doc.split("\n")[0]
+        if title.startswith("# "):
+            title = title[2:]
+
+        # Print result entry with styling
+        click.echo()
+        click.secho(f"{title}", fg="bright_blue", bold=True)
+
+        # Show duplicate links if any exist
+        if title in duplicates:
+            dupe_links = []
+            for _, dupe_meta, _ in duplicates[title]:
+                dupe_links.append(
+                    f"bear://x-callback-url/open-note?title={title}&new_window=yes"
+                )
+            dupe_text = "s" if len(dupe_links) > 1 else ""
+            dupe_links_text = ", ".join(dupe_links)
+            click.secho(
+                f" (Duplicate note{dupe_text} here: {dupe_links_text})",
+                fg="yellow",
+                dim=True,
+            )
+
+        click.secho(f"Relevance: {relevance}%", fg="green", dim=True)
+
+        # Preview text
+        preview = doc.replace("\n", " ").strip()
+        preview = preview[:150] + "..." if len(preview) > 150 else preview
+        click.echo(preview)
+
+        # Metadata and link
+        click.secho(f"📝 {meta['filename']}", fg="bright_black")
+        click.secho(
+            f"🔗 bear://x-callback-url/open-note?title={title}&new_window=yes",
+            fg="bright_black",
+            underline=True,
+        )
+
+        if i < result_count - 1:
+            click.secho("─" * 80, fg="bright_black", dim=True)
+
+    # Footer
+    click.echo()
+    click.secho("─" * 80, fg="bright_black")
+    click.secho(
+        "💡 Tip: Use 'make ask \"<prompt>\"' to generate AI responses about\n"
+        "    these topics",
+        fg="yellow",
+        dim=True,
     )
+
+
+@cli.command()
+@click.argument("prompt")
+def ask(prompt):
+    """
+    Generate an answer to a prompt using the AI model.
+    This command uses smollm2 to generate a response.
+    """
+    click.echo("Generating response...")
     answer = generate_answer(prompt)
     click.echo("\nAnswer:\n")
     click.echo(answer)

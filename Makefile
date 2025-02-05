@@ -1,4 +1,4 @@
-.PHONY: help venv install install-dev test sync index ask clean format
+.PHONY: help venv install install-dev test sync index ask search clean format
 
 VENV_DIR=venv
 PYTHON=$(VENV_DIR)/bin/python
@@ -15,7 +15,8 @@ help:
 	@echo "  make test        - Run tests"
 	@echo "  make sync        - Sync Bear notes to synced-notes directory"
 	@echo "  make index       - Index synced notes in ChromaDB"
-	@echo "  make ask         - Ask a question about your notes"
+	@echo "  make search      - Search your notes for relevant documents"
+	@echo "  make ask         - Ask the AI to generate a response to your prompt"
 	@echo "  make clean       - Remove generated files and directories"
 
 venv:
@@ -63,6 +64,20 @@ start-ollama:
 		ollama serve & \
 	else \
 		echo "Ollama is already running"; \
+	fi
+
+search:
+	@if [ ! -d "$(NOTES_DB)" ]; then \
+		echo "Error: Database not found at $(NOTES_DB)"; \
+		echo "Please run 'make sync' and 'make index' first to create and populate the index."; \
+		exit 1; \
+	fi
+	@read -p "Enter your search query: " query; \
+	read -p "Open results in web browser? (y/n): " web_answer; \
+	if [ "$$web_answer" = "y" ]; then \
+		$(PYTHON) -m notes_analyzer search "$$query" --web; \
+	else \
+		$(PYTHON) -m notes_analyzer search "$$query"; \
 	fi
 
 ask:
