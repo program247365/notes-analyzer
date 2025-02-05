@@ -7,7 +7,7 @@
 
 > Using [smollm2](https://ollama.com/library/smollm2:135m) to interact with your [Bear notes](https://bear.app).
 
-Search through and ask questions about your Bear notes using AI.
+Search through and ask questions about your Bear notes using local AI models served by Ollama.
 
 ## Quickstart
 
